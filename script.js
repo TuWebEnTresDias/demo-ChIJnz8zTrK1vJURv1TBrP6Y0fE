@@ -147,84 +147,63 @@
         var dotsContainer = document.querySelector('.carrusel-dots');
         if (!track || !prevBtn || !nextBtn) return;
 
-        var originalSlides = Array.from(track.querySelectorAll('.carrusel-slide'));
-        var realCount = originalSlides.length;
-        if (realCount === 0) return;
+        var slides = Array.from(track.querySelectorAll('.carrusel-slide'));
+        var slideCount = slides.length;
+        if (slideCount === 0) return;
 
-        var currentIndex = 1; // arranca en el primer slide real
+        var currentIndex = 1; // arranca en la primer slide (1-based)
         var isClickLocked = false;
-        var isJumping = false;
 
-        // Clonar para loop infinito: [6'][1][2][3][4][5][6][1']
-        track.appendChild(originalSlides[0].cloneNode(true));
-        track.insertBefore(originalSlides[realCount - 1].cloneNode(true), originalSlides[0]);
-
-        // --- Utilidades ---
-        function getSlideWidth() {
+        // --- Cálculos ---
+        function getStepWidth() {
             var slide = track.querySelector('.carrusel-slide');
             if (!slide) return 400;
             var gap = parseFloat(window.getComputedStyle(track).gap) || 16;
-            return slide.offsetWidth + gap;
+            return slide.getBoundingClientRect().width + gap;
         }
 
-        // scrollToIndex: mueve el scroll (no toca currentIndex, lo deja al scroll listener)
-        function scrollToIndex(index, smooth) {
-            var w = getSlideWidth();
-            track.style.setProperty('scroll-behavior', smooth ? 'smooth' : 'auto');
-            track.scrollLeft = index * w;
-        }
-
-        // jumpTo: salto instantáneo + actualiza currentIndex (para clones)
-        function jumpTo(index) {
-            currentIndex = index;
-            var w = getSlideWidth();
-            track.style.setProperty('scroll-behavior', 'auto');
-            track.scrollLeft = index * w;
-            updateDots();
+        function updateTransform(smooth) {
+            var step = getStepWidth();
+            track.style.transition = smooth ? 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none';
+            track.style.transform = 'translateX(-' + (currentIndex * step) + 'px)';
         }
 
         function updateDots() {
             if (!dotsContainer) return;
-            // currentIndex 1..realCount → dot 0..realCount-1
-            var dotIdx = ((currentIndex - 1) % realCount + realCount) % realCount;
+            // currentIndex 1..slideCount → dot 0..slideCount-1
+            var dotIdx = currentIndex - 1;
             var dots = dotsContainer.querySelectorAll('.carrusel-dot');
             for (var i = 0; i < dots.length; i++) {
                 dots[i].classList.toggle('active', i === dotIdx);
             }
         }
 
-        // --- Navegación con botones ---
+        // --- Navegación ---
         function navigate(direction) {
             if (isClickLocked) return;
             isClickLocked = true;
-            scrollToIndex(currentIndex + direction, true);
-            setTimeout(function () { isClickLocked = false; }, 400);
-        }
 
-        // --- Scroll: detecta la posición actual y clones ---
-        track.addEventListener('scroll', function () {
-            if (isJumping) return;
-            var step = getSlideWidth();
-            var rawIndex = Math.round(track.scrollLeft / step);
-            if (rawIndex === currentIndex) return;
+            var target = currentIndex + direction;
+            var isWrap = false;
 
-            currentIndex = rawIndex;
+            if (target < 1) {
+                currentIndex = slideCount; // salta al último
+                isWrap = true;
+            } else if (target > slideCount) {
+                currentIndex = 1; // salta al primero
+                isWrap = true;
+            } else {
+                currentIndex = target;
+            }
+
+            updateTransform(!isWrap);
             updateDots();
 
-            // Si llegamos a un clon, rebotamos instantáneamente
-            if (rawIndex === 0) {
-                isJumping = true;
-                jumpTo(realCount);
-                isJumping = false;
-            } else if (rawIndex === realCount + 1) {
-                isJumping = true;
-                jumpTo(1);
-                isJumping = false;
-            }
-        });
+            setTimeout(function () { isClickLocked = false; }, isWrap ? 50 : 400);
+        }
 
         // --- Construir dots ---
-        for (var i = 0; i < realCount; i++) {
+        for (var i = 0; i < slideCount; i++) {
             (function (idx) {
                 var dot = document.createElement('button');
                 dot.className = 'carrusel-dot' + (i === 0 ? ' active' : '');
@@ -232,7 +211,9 @@
                 dot.addEventListener('click', function () {
                     if (isClickLocked) return;
                     isClickLocked = true;
-                    scrollToIndex(idx + 1, true);
+                    currentIndex = idx + 1;
+                    updateTransform(true);
+                    updateDots();
                     setTimeout(function () { isClickLocked = false; }, 400);
                 });
                 dotsContainer.appendChild(dot);
@@ -244,7 +225,12 @@
         nextBtn.addEventListener('click', function () { navigate(1); });
 
         // --- Inicializar ---
-        jumpTo(1);
+        // Pista: overflow hidden + transition no muestra nada al inicio,
+        // así que ponemos la posición inicial sin transición
+        track.style.transition = 'none';
+        var initStep = getStepWidth();
+        track.style.transform = 'translateX(-' + (1 * initStep) + 'px)';
+        updateDots();
     })();
 
     // --- Reservation Form → WhatsApp ---
