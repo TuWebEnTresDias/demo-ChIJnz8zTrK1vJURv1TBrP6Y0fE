@@ -139,7 +139,7 @@
         });
     });
 
-    // --- Carrusel: Así se ve el lugar ---
+    // --- Carrusel Infinito: Así se ve el lugar ---
     (function initCarousel() {
         var track = document.querySelector('.carrusel-track');
         var prevBtn = document.querySelector('.carrusel-prev');
@@ -147,13 +147,22 @@
         var dotsContainer = document.querySelector('.carrusel-dots');
         if (!track || !prevBtn || !nextBtn) return;
 
-        var slides = track.querySelectorAll('.carrusel-slide');
+        var originalSlides = track.querySelectorAll('.carrusel-slide');
+        var realCount = originalSlides.length;
         var slideWidth = 0;
-        var currentIndex = 0;
+
+        // --- Clonar primera y última para el loop infinito ---
+        var firstClone = originalSlides[0].cloneNode(true);
+        var lastClone = originalSlides[realCount - 1].cloneNode(true);
+        track.insertBefore(lastClone, originalSlides[0]);
+        track.appendChild(firstClone);
+
+        var allSlides = track.querySelectorAll('.carrusel-slide');
+        var totalSlides = allSlides.length; // realCount + 2
 
         function getSlideWidth() {
-            if (slides.length > 0) {
-                var slide = slides[0];
+            if (allSlides.length > 0) {
+                var slide = allSlides[0];
                 var style = window.getComputedStyle(slide);
                 var marginLeft = parseFloat(style.marginLeft) || 0;
                 var marginRight = parseFloat(style.marginRight) || 0;
@@ -162,62 +171,95 @@
             }
         }
 
+        function getRealIndex(scrollLeft) {
+            // rawIndex 0 = clone del último → dot real = último
+            // rawIndex 1..realCount = slides reales → dot = rawIndex - 1
+            // rawIndex realCount+1 = clone del primero → dot = 0
+            var rawIndex = Math.round(scrollLeft / slideWidth);
+            return ((rawIndex - 1) % realCount + realCount) % realCount;
+        }
+
         function updateDots() {
             if (!dotsContainer) return;
-            var dotIndex = Math.round(track.scrollLeft / slideWidth);
+            var dotIndex = getRealIndex(track.scrollLeft);
             dotsContainer.querySelectorAll('.carrusel-dot').forEach(function (dot, i) {
                 dot.classList.toggle('active', i === dotIndex);
             });
         }
 
-        function scrollTo(index) {
+        function scrollToReal(index) {
+            // index 0 = primer slide real, se muestra en posición 1
             getSlideWidth();
             if (slideWidth <= 0) {
-                slideWidth = track.querySelector('.carrusel-slide').offsetWidth + 16;
+                slideWidth = allSlides[0].offsetWidth + 16;
             }
-            track.scrollTo({ left: index * slideWidth, behavior: 'smooth' });
+            track.scrollTo({ left: (index + 1) * slideWidth, behavior: 'smooth' });
         }
 
-        // Build dots
-        if (dotsContainer && slides.length > 0) {
-            slides.forEach(function (_, i) {
-                var dot = document.createElement('button');
-                dot.className = 'carrusel-dot' + (i === 0 ? ' active' : '');
-                dot.setAttribute('aria-label', 'Ir a imagen ' + (i + 1));
-                dot.addEventListener('click', function () { scrollTo(i); });
-                dotsContainer.appendChild(dot);
-            });
+        // --- Manejar loop infinito en scroll (el truco del clon) ---
+        function handleInfiniteScroll() {
+            getSlideWidth();
+            if (slideWidth <= 0) return;
+
+            var rawIndex = Math.round(track.scrollLeft / slideWidth);
+
+            if (rawIndex === 0) {
+                // Llegó al clone del último → saltar al último real
+                track.style.scrollBehavior = 'auto';
+                track.scrollLeft = slideWidth * realCount;
+                track.style.scrollBehavior = 'smooth';
+            } else if (rawIndex === totalSlides - 1) {
+                // Llegó al clone del primero → saltar al primer real
+                track.style.scrollBehavior = 'auto';
+                track.scrollLeft = slideWidth;
+                track.style.scrollBehavior = 'smooth';
+            }
+
+            updateDots();
         }
 
+        // --- Construir dots (solo para slides reales) ---
+        if (dotsContainer && realCount > 0) {
+            for (var i = 0; i < realCount; i++) {
+                (function (idx) {
+                    var dot = document.createElement('button');
+                    dot.className = 'carrusel-dot' + (i === 0 ? ' active' : '');
+                    dot.setAttribute('aria-label', 'Ir a imagen ' + (idx + 1));
+                    dot.addEventListener('click', function () { scrollToReal(idx); });
+                    dotsContainer.appendChild(dot);
+                })(i);
+            }
+        }
+
+        // --- Botones: siguiente/anterior ---
         prevBtn.addEventListener('click', function () {
             getSlideWidth();
             if (slideWidth <= 0) return;
-            var newIndex = Math.max(0, Math.round(track.scrollLeft / slideWidth) - 1);
-            scrollTo(newIndex);
+            track.scrollBy({ left: -slideWidth, behavior: 'smooth' });
         });
 
         nextBtn.addEventListener('click', function () {
             getSlideWidth();
             if (slideWidth <= 0) return;
-            var newIndex = Math.min(slides.length - 1, Math.round(track.scrollLeft / slideWidth) + 1);
-            scrollTo(newIndex);
+            track.scrollBy({ left: slideWidth, behavior: 'smooth' });
         });
 
-        // Update dots on scroll
-        track.addEventListener('scroll', function () {
-            getSlideWidth();
-            updateDots();
-        });
+        // --- Scroll listener para el loop ---
+        track.addEventListener('scroll', handleInfiniteScroll);
 
-        // Recalc on resize
+        // --- Recalcular en resize ---
         window.addEventListener('resize', function () {
             getSlideWidth();
-            updateDots();
         });
 
-        // Initial setup
+        // --- Inicializar en el primer slide real ---
         setTimeout(function () {
             getSlideWidth();
+            if (slideWidth > 0) {
+                track.style.scrollBehavior = 'auto';
+                track.scrollLeft = slideWidth;
+                track.style.scrollBehavior = 'smooth';
+            }
             updateDots();
         }, 200);
     })();
