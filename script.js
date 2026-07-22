@@ -147,121 +147,76 @@
         var dotsContainer = document.querySelector('.carrusel-dots');
         if (!track || !prevBtn || !nextBtn) return;
 
-        var originalSlides = track.querySelectorAll('.carrusel-slide');
+        var originalSlides = Array.from(track.querySelectorAll('.carrusel-slide'));
         var realCount = originalSlides.length;
-        var slideWidth = 0;
+        var currentIndex = 1; // arranca en el primer slide real (posición 1)
+        var isAnimating = false;
 
-        // --- Clonar primera y última para el loop infinito ---
+        // Clonar: [6'][1][2][3][4][5][6][1']
         var firstClone = originalSlides[0].cloneNode(true);
         var lastClone = originalSlides[realCount - 1].cloneNode(true);
-        track.insertBefore(lastClone, originalSlides[0]);
         track.appendChild(firstClone);
-
-        var allSlides = track.querySelectorAll('.carrusel-slide');
-        var totalSlides = allSlides.length; // realCount + 2
+        track.insertBefore(lastClone, originalSlides[0]);
 
         function getSlideWidth() {
-            if (allSlides.length > 0) {
-                var slide = allSlides[0];
-                var style = window.getComputedStyle(slide);
-                var marginLeft = parseFloat(style.marginLeft) || 0;
-                var marginRight = parseFloat(style.marginRight) || 0;
-                var gap = parseFloat(window.getComputedStyle(track).gap) || 16;
-                slideWidth = slide.offsetWidth + marginLeft + marginRight + gap;
-            }
+            var slide = track.querySelector('.carrusel-slide');
+            if (!slide) return 400;
+            var gap = parseFloat(window.getComputedStyle(track).gap) || 16;
+            return slide.offsetWidth + gap;
         }
 
-        function getRealIndex(scrollLeft) {
-            // rawIndex 0 = clone del último → dot real = último
-            // rawIndex 1..realCount = slides reales → dot = rawIndex - 1
-            // rawIndex realCount+1 = clone del primero → dot = 0
-            var rawIndex = Math.round(scrollLeft / slideWidth);
-            return ((rawIndex - 1) % realCount + realCount) % realCount;
+        function goTo(index, smooth) {
+            currentIndex = index;
+            var w = getSlideWidth();
+            track.scrollTo({ left: index * w, behavior: smooth ? 'smooth' : 'auto' });
         }
 
-        function updateDots() {
-            if (!dotsContainer) return;
-            var dotIndex = getRealIndex(track.scrollLeft);
-            dotsContainer.querySelectorAll('.carrusel-dot').forEach(function (dot, i) {
-                dot.classList.toggle('active', i === dotIndex);
-            });
-        }
+        function navigate(direction) {
+            if (isAnimating) return;
+            isAnimating = true;
 
-        function scrollToReal(index) {
-            // index 0 = primer slide real, se muestra en posición 1
-            getSlideWidth();
-            if (slideWidth <= 0) {
-                slideWidth = allSlides[0].offsetWidth + 16;
-            }
-            track.scrollTo({ left: (index + 1) * slideWidth, behavior: 'smooth' });
-        }
+            var targetIndex = currentIndex + direction;
 
-        // --- Manejar loop infinito en scroll (el truco del clon) ---
-        function handleInfiniteScroll() {
-            getSlideWidth();
-            if (slideWidth <= 0) return;
-
-            var rawIndex = Math.round(track.scrollLeft / slideWidth);
-
-            if (rawIndex === 0) {
-                // Llegó al clone del último → saltar al último real
-                track.style.scrollBehavior = 'auto';
-                track.scrollLeft = slideWidth * realCount;
-                track.style.scrollBehavior = 'smooth';
-            } else if (rawIndex === totalSlides - 1) {
-                // Llegó al clone del primero → saltar al primer real
-                track.style.scrollBehavior = 'auto';
-                track.scrollLeft = slideWidth;
-                track.style.scrollBehavior = 'smooth';
+            // Si se pasa del límite, wrappear instantáneamente al otro lado
+            if (targetIndex <= 0) {
+                // Va antes del clone inicial → salta al último real
+                goTo(realCount, false);
+            } else if (targetIndex >= realCount + 1) {
+                // Va después del clone final → salta al primer real
+                goTo(1, false);
+            } else {
+                goTo(targetIndex, true);
             }
 
             updateDots();
+
+            // Pequeño lock para evitar que clicks rápidos rompan la animación
+            setTimeout(function () { isAnimating = false; }, 500);
         }
 
-        // --- Construir dots (solo para slides reales) ---
-        if (dotsContainer && realCount > 0) {
-            for (var i = 0; i < realCount; i++) {
-                (function (idx) {
-                    var dot = document.createElement('button');
-                    dot.className = 'carrusel-dot' + (i === 0 ? ' active' : '');
-                    dot.setAttribute('aria-label', 'Ir a imagen ' + (idx + 1));
-                    dot.addEventListener('click', function () { scrollToReal(idx); });
-                    dotsContainer.appendChild(dot);
-                })(i);
-            }
+        // --- Construir dots ---
+        for (var i = 0; i < realCount; i++) {
+            (function (idx) {
+                var dot = document.createElement('button');
+                dot.className = 'carrusel-dot' + (i === 0 ? ' active' : '');
+                dot.setAttribute('aria-label', 'Ir a imagen ' + (idx + 1));
+                dot.addEventListener('click', function () {
+                    if (isAnimating) return;
+                    goTo(idx + 1, true);
+                    updateDots();
+                    setTimeout(function () { isAnimating = false; }, 500);
+                });
+                dotsContainer.appendChild(dot);
+            })(i);
         }
 
-        // --- Botones: siguiente/anterior ---
-        prevBtn.addEventListener('click', function () {
-            getSlideWidth();
-            if (slideWidth <= 0) return;
-            track.scrollBy({ left: -slideWidth, behavior: 'smooth' });
-        });
+        // --- Botones ---
+        prevBtn.addEventListener('click', function () { navigate(-1); });
+        nextBtn.addEventListener('click', function () { navigate(1); });
 
-        nextBtn.addEventListener('click', function () {
-            getSlideWidth();
-            if (slideWidth <= 0) return;
-            track.scrollBy({ left: slideWidth, behavior: 'smooth' });
-        });
-
-        // --- Scroll listener para el loop ---
-        track.addEventListener('scroll', handleInfiniteScroll);
-
-        // --- Recalcular en resize ---
-        window.addEventListener('resize', function () {
-            getSlideWidth();
-        });
-
-        // --- Inicializar en el primer slide real ---
-        setTimeout(function () {
-            getSlideWidth();
-            if (slideWidth > 0) {
-                track.style.scrollBehavior = 'auto';
-                track.scrollLeft = slideWidth;
-                track.style.scrollBehavior = 'smooth';
-            }
-            updateDots();
-        }, 200);
+        // --- Inicializar ---
+        goTo(1, false);
+        updateDots();
     })();
 
     // --- Reservation Form → WhatsApp ---

@@ -893,9 +893,7 @@ h4 { font-size: 1.1rem; }
 .carrusel-track {
     display: flex;
     gap: var(--space-md);
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding: var(--space-xs) 0 var(--space-lg);
     scrollbar-width: none;
@@ -907,7 +905,6 @@ h4 { font-size: 1.1rem; }
 
 .carrusel-slide {
     flex: 0 0 calc((100% - 2 * var(--space-md)) / 3);
-    scroll-snap-align: start;
     position: relative;
     border-radius: var(--radius-lg);
     overflow: hidden;
