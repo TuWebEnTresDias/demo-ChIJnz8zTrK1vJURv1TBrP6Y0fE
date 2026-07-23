@@ -150,6 +150,14 @@
         var slideCount = track.children.length;
         if (slideCount === 0) return;
 
+        // --- Clonar las primeras slides al final para rellenar espacios en blanco ---
+        // Con 3 slides visibles, al mostrar la última (índice 5), a la derecha no hay nada.
+        // Clonamos las primeras 2 para que ocupen ese espacio.
+        var clonesToAdd = Math.min(2, slideCount);
+        for (var i = 0; i < clonesToAdd; i++) {
+            track.appendChild(track.children[i].cloneNode(true));
+        }
+
         var currentIndex = 0; // 0-based: 0 = primera slide
         var isClickLocked = false;
 
